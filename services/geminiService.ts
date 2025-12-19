@@ -2,15 +2,28 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { AIAnalysisResult, InventoryItem } from "../types";
 
-// Always use const ai = new GoogleGenAI({apiKey: process.env.API_KEY});
-// We assume the API key is pre-configured and accessible.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Accesso sicuro: se process.env non è definito (es. GitHub Pages senza build step), 
+// l'app non crasha ma le funzioni AI restituiranno null o errori gestiti.
+const getApiKey = () => {
+  try {
+    return (window as any).process?.env?.API_KEY || (import.meta as any).env?.VITE_GEMINI_API_KEY || "";
+  } catch {
+    return "";
+  }
+};
+
+const ai = new GoogleGenAI({ apiKey: getApiKey() });
 
 export const analyzeItemData = async (name: string, sku: string): Promise<AIAnalysisResult | null> => {
+  if (!getApiKey()) {
+    console.warn("Gemini API Key non configurata. Funzioni AI disabilitate.");
+    return null;
+  }
+
   try {
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: `Analizza questo prodotto di magazzino. Nome: "${name}", SKU: "${sku}". Fornisci suggerimenti per la categoria, una descrizione professionale e una breve valutazione del rischio di stoccaggio (es. infiammabile, deperibile, fragile).`,
+      contents: `Analizza questo prodotto di magazzino. Nome: "${name}", SKU: "${sku}". Fornisci suggerimenti per la categoria, una descrizione professionale e una valutazione del rischio.`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -25,15 +38,9 @@ export const analyzeItemData = async (name: string, sku: string): Promise<AIAnal
       },
     });
 
-    // The GenerateContentResponse object features a text property (not a method).
     const text = response.text;
     if (text) {
-      try {
-        return JSON.parse(text) as AIAnalysisResult;
-      } catch (parseError) {
-        console.error("JSON Parse Error on Gemini Response:", parseError);
-        return null;
-      }
+      return JSON.parse(text) as AIAnalysisResult;
     }
     return null;
   } catch (error) {
@@ -43,18 +50,16 @@ export const analyzeItemData = async (name: string, sku: string): Promise<AIAnal
 };
 
 export const getInventoryAdvice = async (items: InventoryItem[]): Promise<string> => {
+  if (!getApiKey() || items.length === 0) return "Configura l'API per ricevere consigli logistici.";
+
   try {
-    if (items.length === 0) return "Aggiungi articoli per l'analisi.";
-    
-    const stockSummary = items.slice(0, 20).map(i => `${i.name} (Qta: ${i.quantity}, Min: ${i.minStockLevel})`).join(', ');
+    const stockSummary = items.slice(0, 15).map(i => `${i.name} (${i.quantity} pz)`).join(', ');
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: `Agisci come un esperto di logistica. Analizza questo inventario e fornisci 3 consigli rapidi per ottimizzare il magazzino o avvisi su prodotti in esaurimento: ${stockSummary}`,
+      contents: `Fornisci un breve consiglio logistico (max 20 parole) basato su questi prodotti: ${stockSummary}`,
     });
-    // The GenerateContentResponse object features a text property (not a method).
-    return response.text || "Nessun consiglio disponibile al momento.";
+    return response.text || "Inventario monitorato correttamente.";
   } catch (error) {
-    console.error("Gemini Advice Error:", error);
-    return "Consigli AI temporaneamente non disponibili.";
+    return "Analisi AI temporaneamente non disponibile.";
   }
 };
