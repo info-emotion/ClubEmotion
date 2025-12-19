@@ -8,15 +8,27 @@ import BarcodeScanner from './components/BarcodeScanner';
 import ItemForm from './components/ItemForm';
 import { fetchFromSheet, saveToSheet, isValidSheetUrl } from './services/googleSheetsService';
 
+// URL fornito dall'utente per la configurazione automatica
+const DEFAULT_SHEET_URL = 'https://script.google.com/macros/s/AKfycbzJ39jOpXGi23qPY65QReyjChKz3f_yyUNIT7_BJAKKlm2dYtO-yMA8Pq9udLEx_SSgvQ/exec';
+
 const INITIAL_DATA: InventoryItem[] = [
   {
-    id: '1', sku: '8001234567890', name: 'Esempio Prodotto', category: 'Generale', quantity: 15, minStockLevel: 5, price: 12.50, location: 'A-1', description: 'Benvenuto in StockMaster. Connetti il Cloud per iniziare.', lastUpdated: new Date().toISOString()
+    id: '1', sku: '8001234567890', name: 'Esempio Prodotto', category: 'Generale', quantity: 15, minStockLevel: 5, price: 12.50, location: 'A-1', description: 'Benvenuto in StockMaster. Cloud configurato correttamente.', lastUpdated: new Date().toISOString()
   }
 ];
 
 const App: React.FC = () => {
   const [items, setItems] = useState<InventoryItem[]>([]);
-  const [sheetUrl, setSheetUrl] = useState(() => localStorage.getItem('google_sheet_url') || '');
+  const [sheetUrl, setSheetUrl] = useState(() => {
+    const saved = localStorage.getItem('google_sheet_url');
+    // Se non c'è nulla salvato, usa quello fornito dall'utente
+    if (!saved) {
+      localStorage.setItem('google_sheet_url', DEFAULT_SHEET_URL);
+      return DEFAULT_SHEET_URL;
+    }
+    return saved;
+  });
+  
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [currentView, setCurrentView] = useState<ViewType>(ViewType.DASHBOARD);
@@ -28,28 +40,27 @@ const App: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [scannedSku, setScannedSku] = useState<string | null>(null);
 
-  // Caricamento iniziale e ricarica Cloud
   const loadData = useCallback(async (showLoader = true) => {
     if (showLoader) setIsSyncing(true);
     setSyncError(null);
     
-    // 1. Carica subito i dati locali per velocità
+    // Carica dati locali per reattività immediata
     const localData = localStorage.getItem('inventory_data');
     if (localData) {
       try {
         setItems(JSON.parse(localData));
       } catch (e) {
-        console.error("Local parse error", e);
+        console.error("Errore lettura dati locali", e);
       }
     } else if (items.length === 0) {
       setItems(INITIAL_DATA);
     }
 
-    // 2. Tenta la sincronizzazione se l'URL è configurato
-    const savedUrl = localStorage.getItem('google_sheet_url');
-    if (savedUrl && isValidSheetUrl(savedUrl)) {
+    // Sincronizzazione Cloud
+    const currentUrl = localStorage.getItem('google_sheet_url') || sheetUrl;
+    if (currentUrl && isValidSheetUrl(currentUrl)) {
       try {
-        const cloudData = await fetchFromSheet(savedUrl);
+        const cloudData = await fetchFromSheet(currentUrl);
         if (cloudData) {
           setItems(cloudData);
           localStorage.setItem('inventory_data', JSON.stringify(cloudData));
@@ -58,17 +69,16 @@ const App: React.FC = () => {
           setSyncError("Impossibile connettersi al Cloud. Verificare URL.");
         }
       } catch (err) {
-        setSyncError("Errore di rete. Modalità offline attiva.");
+        setSyncError("Errore di rete. Dati cloud non aggiornati.");
       }
     }
     
     if (showLoader) setIsSyncing(false);
-  }, [items.length]);
+  }, [items.length, sheetUrl]);
 
   useEffect(() => {
     loadData();
-    // Refresh automatico ogni 5 minuti se in background
-    const interval = setInterval(() => loadData(false), 300000);
+    const interval = setInterval(() => loadData(false), 300000); // 5 min
     return () => clearInterval(interval);
   }, [loadData]);
 
@@ -80,7 +90,7 @@ const App: React.FC = () => {
     if (savedUrl && isValidSheetUrl(savedUrl)) {
       setIsSyncing(true);
       const success = await saveToSheet(savedUrl, newItems);
-      if (!success) setSyncError("Modifica salvata solo localmente. Errore Cloud.");
+      if (!success) setSyncError("Modifica salvata solo localmente.");
       else setSyncError(null);
       setIsSyncing(false);
     }
@@ -88,7 +98,7 @@ const App: React.FC = () => {
 
   const handleSaveSettings = () => {
     if (sheetUrl && !isValidSheetUrl(sheetUrl)) {
-      alert("L'URL deve essere quello fornito da Apps Script e terminare con /exec");
+      alert("L'URL deve terminare con /exec");
       return;
     }
     localStorage.setItem('google_sheet_url', sheetUrl);
@@ -201,7 +211,7 @@ const App: React.FC = () => {
               {currentView === ViewType.DASHBOARD ? 'Stato del Magazzino' : 'Gestione Inventario'}
             </h2>
             <p className="text-slate-500 text-sm mt-1">
-              {sheetUrl ? 'I dati sono sincronizzati con il foglio Google' : '⚠️ Modalità locale attiva (dati salvati solo su questo dispositivo)'}
+              {sheetUrl ? 'I dati sono sincronizzati con il foglio Google' : '⚠️ Modalità locale attiva'}
             </p>
           </div>
 
@@ -211,7 +221,6 @@ const App: React.FC = () => {
         </div>
       </main>
 
-      {/* Modal Impostazioni - Ora persistente */}
       {isSettingsOpen && (
         <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-lg rounded-[2.5rem] p-8 shadow-2xl animate-in zoom-in-95 duration-200">
@@ -229,13 +238,13 @@ const App: React.FC = () => {
                 <div>
                   <h4 className="font-bold text-emerald-900 text-sm">Sincronizzazione Cloud</h4>
                   <p className="text-xs text-emerald-700 leading-relaxed mt-1">
-                    Connetti un foglio Google tramite Apps Script per rendere i dati accessibili a tutto il team.
+                    Connetti un foglio Google tramite Apps Script.
                   </p>
                 </div>
               </div>
 
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">URL Applicazione Web Apps Script</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Web Apps Script URL</label>
                 <input 
                   type="text" 
                   placeholder="https://script.google.com/macros/s/.../exec" 
@@ -243,22 +252,13 @@ const App: React.FC = () => {
                   onChange={e => setSheetUrl(e.target.value)}
                   className={`w-full p-4 bg-slate-50 border rounded-2xl font-mono text-[10px] outline-none transition-all ${sheetUrl && !isValidSheetUrl(sheetUrl) ? 'border-red-300 ring-4 ring-red-50' : 'border-slate-200 focus:ring-4 focus:ring-emerald-50 focus:border-emerald-500 focus:bg-white'}`}
                 />
-                {sheetUrl && !isValidSheetUrl(sheetUrl) && <p className="text-red-500 text-[10px] font-bold px-1">L'URL deve terminare con /exec per funzionare</p>}
-              </div>
-
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                <h4 className="text-xs font-bold text-slate-600 uppercase mb-2">Informazioni App</h4>
-                <div className="flex justify-between text-[11px] text-slate-500">
-                  <span>Versione</span>
-                  <span className="font-mono">2.1.0-stable</span>
-                </div>
               </div>
             </div>
 
             <div className="mt-10 flex gap-4">
               <button 
                 onClick={() => { 
-                  if(confirm('Disconnettere il Cloud? I dati rimarranno salvati solo localmente.')) {
+                  if(confirm('Disconnettere il Cloud?')) {
                     localStorage.removeItem('google_sheet_url'); 
                     setSheetUrl(''); 
                     setIsSettingsOpen(false); 
@@ -283,7 +283,6 @@ const App: React.FC = () => {
 
       {(isFormOpen || editingItem) && <ItemForm initialData={editingItem} scannedSku={scannedSku} onSave={handleSaveItem} onClose={() => { setIsFormOpen(false); setEditingItem(null); }} />}
       
-      {/* Tasto Mobile Barcode flottante */}
       <div className="fixed bottom-8 right-8 lg:hidden flex flex-col gap-4 z-40">
         <button onClick={() => setIsScannerOpen(true)} className="w-16 h-16 bg-emerald-600 text-white rounded-full shadow-2xl flex items-center justify-center active:scale-90 transition-all border-4 border-white">
           <QrCode className="w-8 h-8" />
@@ -304,7 +303,6 @@ const App: React.FC = () => {
   );
 };
 
-// Fixed TypeScript error by adding <any> generic to ReactElement cast
 const SidebarItem = ({ icon, label, active, onClick, collapsed }: any) => (
   <button onClick={onClick} className={`flex items-center gap-4 w-full p-3 rounded-2xl transition-all ${active ? 'bg-emerald-50 text-emerald-600 shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}>
     <div className={`${active ? 'text-emerald-600' : 'text-slate-400'}`}>{React.cloneElement(icon as React.ReactElement<any>, { size: 22 })}</div>
