@@ -1,0 +1,7 @@
+{
+  "name": "StockMaster AI",
+  "description": "A modern inventory management system with real-time barcode scanning, AI-powered item categorization, and stock analytics.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
