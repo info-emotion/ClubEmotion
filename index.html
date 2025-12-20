@@ -8,6 +8,16 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     
+    <script>
+      // Polyfill essenziale per evitare blocchi silenziosi delle librerie
+      window.process = { 
+        env: { 
+          NODE_ENV: 'production',
+          API_KEY: "" // Verrà iniettata dal sistema se disponibile
+        } 
+      };
+    </script>
+
     <script type="importmap">
 {
   "imports": {
@@ -27,20 +37,52 @@
     <style>
         body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; background-color: #f8fafc; }
         .scrollbar-hide::-webkit-scrollbar { display: none; }
+        /* Animazione di caricamento */
+        #loader-container { transition: opacity 0.5s ease-out; }
+        .loaded #loader-container { opacity: 0; pointer-events: none; }
     </style>
 </head>
 <body>
-    <div id="root">
-        <div class="flex items-center justify-center min-h-screen">
-            <div class="flex flex-col items-center gap-4">
-                <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500"></div>
-                <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Caricamento Sistema...</p>
-            </div>
+    <div id="root"></div>
+    
+    <!-- UI di caricamento iniziale -->
+    <div id="loader-container" class="fixed inset-0 flex items-center justify-center bg-white z-[9999]">
+        <div class="flex flex-col items-center gap-4">
+            <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500"></div>
+            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em]">Caricamento Sistema...</p>
         </div>
     </div>
 
-    <!-- Il loader di esm.sh cercherà automaticamente gli script con type="text/tsx" o "text/ts" -->
-    <script type="text/tsx" src="./index.tsx"></script>
-    <script type="module" src="https://esm.sh/tsx"></script>
+    <!-- Script di Bootstrap IN LINEA: Bypassa il blocco MIME del server statico -->
+    <script type="text/tsx">
+        import React from 'react';
+        import ReactDOM from 'react-dom/client';
+        import App from './App.tsx';
+
+        try {
+            const rootElement = document.getElementById('root');
+            if (rootElement) {
+                const root = ReactDOM.createRoot(rootElement);
+                root.render(
+                    <React.StrictMode>
+                        <App />
+                    </React.StrictMode>
+                );
+                // Rimuovi il loader dopo il montaggio
+                document.body.classList.add('loaded');
+                console.log("StockMaster AI Avviato con successo");
+            }
+        } catch (err) {
+            console.error("Errore critico durante l'avvio:", err);
+            const loaderText = document.querySelector('#loader-container p');
+            if (loaderText) {
+                loaderText.textContent = "Errore di caricamento. Controlla la console.";
+                loaderText.classList.add('text-red-500');
+            }
+        }
+    </script>
+
+    <!-- Loader di esm.sh che processa i tag text/tsx -->
+    <script type="module" src="https://esm.sh/run"></script>
 </body>
 </html>
