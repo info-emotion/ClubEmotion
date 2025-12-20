@@ -8,9 +8,6 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     
-    <!-- Babel per compilare TSX al volo bypassando i blocchi del server -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    
     <script type="importmap">
 {
   "imports": {
@@ -35,22 +32,15 @@
 <body>
     <div id="root">
         <div class="flex items-center justify-center min-h-screen">
-            <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500"></div>
+            <div class="flex flex-col items-center gap-4">
+                <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500"></div>
+                <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Caricamento Sistema...</p>
+            </div>
         </div>
     </div>
 
-    <!-- Script di Bootstrap per caricare i componenti TSX correttamente -->
-    <script type="text/babel" data-type="module">
-        import React from 'react';
-        import ReactDOM from 'react-dom/client';
-        import App from './App.tsx';
-
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(
-            <React.StrictMode>
-                <App />
-            </React.StrictMode>
-        );
-    </script>
+    <!-- Il loader di esm.sh cercherà automaticamente gli script con type="text/tsx" o "text/ts" -->
+    <script type="text/tsx" src="./index.tsx"></script>
+    <script type="module" src="https://esm.sh/run"></script>
 </body>
 </html>

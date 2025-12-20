@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { LayoutDashboard, Package, QrCode, Search, Plus, Bell, Menu, X, LogOut, CloudSync, RefreshCw, Database, Settings, Link as LinkIcon, AlertCircle, CheckCircle2, RotateCw, WifiOff, Save, ShieldCheck } from 'lucide-react';
+import { LayoutDashboard, Package, QrCode, Search, Plus, Menu, X, Settings, AlertCircle, RefreshCw, WifiOff, Save, ShieldCheck } from 'lucide-react';
 import { InventoryItem, ViewType } from './types.ts';
 import Dashboard from './components/Dashboard.tsx';
 import InventoryList from './components/InventoryList.tsx';
@@ -8,7 +8,6 @@ import BarcodeScanner from './components/BarcodeScanner.tsx';
 import ItemForm from './components/ItemForm.tsx';
 import { fetchFromSheet, saveToSheet, isValidSheetUrl } from './services/googleSheetsService.ts';
 
-// Restante codice invariato...
 const DEFAULT_SHEET_URL = 'https://script.google.com/macros/s/AKfycbzJ39jOpXGi23qPY65QReyjChKz3f_yyUNIT7_BJAKKlm2dYtO-yMA8Pq9udLEx_SSgvQ/exec';
 
 const INITIAL_DATA: InventoryItem[] = [
@@ -73,7 +72,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     loadData();
-    const interval = setInterval(() => loadData(false), 300000); // 5 min
+    const interval = setInterval(() => loadData(false), 300000);
     return () => clearInterval(interval);
   }, [loadData]);
 
