@@ -1,32 +1,31 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { LayoutDashboard, Package, QrCode, Search, Plus, Menu, X, Settings, AlertCircle, RefreshCw, WifiOff, Save, ShieldCheck } from 'lucide-react';
-import { InventoryItem, ViewType } from './types.ts';
+import { 
+  LayoutDashboard, Package, QrCode, Search, Plus, 
+  Menu, X, Settings, AlertCircle, RefreshCw, 
+  WifiOff, Save, ShieldCheck 
+} from 'lucide-react';
+
 import Dashboard from './components/Dashboard.tsx';
 import InventoryList from './components/InventoryList.tsx';
 import BarcodeScanner from './components/BarcodeScanner.tsx';
 import ItemForm from './components/ItemForm.tsx';
 import { fetchFromSheet, saveToSheet, isValidSheetUrl } from './services/googleSheetsService.ts';
+import { ViewType, InventoryItem } from './types.ts';
 
 const DEFAULT_SHEET_URL = 'https://script.google.com/macros/s/AKfycbzJ39jOpXGi23qPY65QReyjChKz3f_yyUNIT7_BJAKKlm2dYtO-yMA8Pq9udLEx_SSgvQ/exec';
 
 const INITIAL_DATA: InventoryItem[] = [
   {
-    id: '1', sku: '8001234567890', name: 'Esempio Prodotto', category: 'Generale', quantity: 15, minStockLevel: 5, price: 12.50, location: 'A-1', description: 'Benvenuto in StockMaster. Cloud configurato correttamente.', lastUpdated: new Date().toISOString()
+    id: '1', sku: '8001234567890', name: 'Prodotto Demo', category: 'Elettronica', 
+    quantity: 12, minStockLevel: 5, price: 29.99, location: 'Corsia A1', 
+    description: 'Articolo di esempio precaricato.', lastUpdated: new Date().toISOString()
   }
 ];
 
-const App: React.FC = () => {
+const App = () => {
   const [items, setItems] = useState<InventoryItem[]>([]);
-  const [sheetUrl, setSheetUrl] = useState(() => {
-    const saved = localStorage.getItem('google_sheet_url');
-    if (!saved) {
-      localStorage.setItem('google_sheet_url', DEFAULT_SHEET_URL);
-      return DEFAULT_SHEET_URL;
-    }
-    return saved;
-  });
-  
+  const [sheetUrl, setSheetUrl] = useState(() => localStorage.getItem('google_sheet_url') || DEFAULT_SHEET_URL);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [currentView, setCurrentView] = useState<ViewType>(ViewType.DASHBOARD);
@@ -44,71 +43,40 @@ const App: React.FC = () => {
     
     const localData = localStorage.getItem('inventory_data');
     if (localData) {
-      try {
-        setItems(JSON.parse(localData));
-      } catch (e) {
-        console.error("Errore lettura dati locali", e);
-      }
+      setItems(JSON.parse(localData));
     } else if (items.length === 0) {
       setItems(INITIAL_DATA);
     }
 
-    const currentUrl = localStorage.getItem('google_sheet_url') || sheetUrl;
-    if (currentUrl && isValidSheetUrl(currentUrl)) {
+    if (sheetUrl && isValidSheetUrl(sheetUrl)) {
       try {
-        const cloudData = await fetchFromSheet(currentUrl);
+        const cloudData = await fetchFromSheet(sheetUrl);
         if (cloudData) {
           setItems(cloudData);
           localStorage.setItem('inventory_data', JSON.stringify(cloudData));
-          setSyncError(null);
         }
       } catch (err) {
-        setSyncError("Cloud non raggiungibile (modalità offline).");
+        setSyncError("Modalità Offline: Cloud non raggiungibile.");
       }
     }
-    
     if (showLoader) setIsSyncing(false);
-  }, [items.length, sheetUrl]);
+  }, [sheetUrl]);
 
   useEffect(() => {
     loadData();
-    const interval = setInterval(() => loadData(false), 300000);
-    return () => clearInterval(interval);
   }, [loadData]);
 
   const syncToCloud = async (newItems: InventoryItem[]) => {
     setItems(newItems);
     localStorage.setItem('inventory_data', JSON.stringify(newItems));
     
-    const savedUrl = localStorage.getItem('google_sheet_url');
-    if (savedUrl && isValidSheetUrl(savedUrl)) {
+    if (sheetUrl && isValidSheetUrl(sheetUrl)) {
       setIsSyncing(true);
-      const success = await saveToSheet(savedUrl, newItems);
-      if (!success) setSyncError("Salvato solo localmente.");
+      const success = await saveToSheet(sheetUrl, newItems);
+      if (!success) setSyncError("Errore salvataggio Cloud.");
       else setSyncError(null);
       setIsSyncing(false);
     }
-  };
-
-  const handleSaveSettings = () => {
-    if (sheetUrl && !isValidSheetUrl(sheetUrl)) {
-      alert("URL non valido. Deve terminare con /exec");
-      return;
-    }
-    localStorage.setItem('google_sheet_url', sheetUrl);
-    setIsSettingsOpen(false);
-    loadData(true);
-  };
-
-  const handleQuantityChange = (id: string, delta: number) => {
-    const updated = items.map(item => {
-      if (item.id === id) {
-        const newQty = Math.max(0, item.quantity + delta);
-        return { ...item, quantity: newQty, lastUpdated: new Date().toISOString() };
-      }
-      return item;
-    });
-    syncToCloud(updated);
   };
 
   const handleSaveItem = (itemData: Partial<InventoryItem>) => {
@@ -119,10 +87,10 @@ const App: React.FC = () => {
       const newItem: InventoryItem = {
         id: crypto.randomUUID(),
         sku: itemData.sku || '',
-        name: itemData.name || 'Prodotto',
-        category: itemData.category || 'Varie',
+        name: itemData.name || 'Senza nome',
+        category: itemData.category || 'Generale',
         quantity: itemData.quantity || 0,
-        minStockLevel: itemData.minStockLevel || 0,
+        minStockLevel: itemData.minStockLevel || 5,
         price: itemData.price || 0,
         location: itemData.location || '',
         description: itemData.description || '',
@@ -136,25 +104,6 @@ const App: React.FC = () => {
     setScannedSku(null);
   };
 
-  const handleDeleteItem = (id: string) => {
-    if (confirm('Eliminare definitivamente questo articolo?')) {
-      syncToCloud(items.filter(i => i.id !== id));
-    }
-  };
-
-  const handleBarcodeScanned = (code: string) => {
-    setIsScannerOpen(false);
-    const existingItem = items.find(i => i.sku === code);
-    if (existingItem) {
-      setEditingItem(existingItem);
-      setIsFormOpen(true);
-    } else {
-      setScannedSku(code);
-      setEditingItem(null);
-      setIsFormOpen(true);
-    }
-  };
-
   const filteredItems = useMemo(() => {
     return items.filter(item => 
       item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -163,131 +112,107 @@ const App: React.FC = () => {
   }, [items, searchQuery]);
 
   return (
-    <div className="min-h-screen flex bg-slate-50 font-sans selection:bg-emerald-100 selection:text-emerald-900 overflow-hidden">
-      {isSidebarOpen && <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-[2px] z-40 lg:hidden" onClick={() => setIsSidebarOpen(false)} />}
+    <div className="min-h-screen flex bg-slate-50 overflow-hidden">
+      {isSidebarOpen && <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsSidebarOpen(false)} />}
 
-      <aside className={`fixed lg:sticky top-0 left-0 z-50 h-screen bg-white border-r border-slate-200 transition-all duration-300 ${isSidebarOpen ? 'w-64 shadow-2xl' : 'w-64 -translate-x-full lg:translate-x-0 lg:w-20'}`}>
+      <aside className={`fixed lg:sticky top-0 left-0 z-50 h-screen bg-white border-r border-slate-200 transition-all duration-300 ${isSidebarOpen ? 'w-64 shadow-2xl translate-x-0' : 'w-64 -translate-x-full lg:translate-x-0 lg:w-20'}`}>
         <div className="flex flex-col h-full">
           <div className="p-6 border-b flex items-center gap-4">
-            <div className="w-10 h-10 bg-emerald-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-emerald-100">
+            <div className="w-10 h-10 bg-emerald-600 rounded-xl flex items-center justify-center text-white shadow-lg">
               <Package className="w-6 h-6" />
             </div>
-            {isSidebarOpen && <h1 className="font-bold text-lg text-slate-800 tracking-tight">StockMaster</h1>}
+            {isSidebarOpen && <h1 className="font-bold text-lg text-slate-800">StockMaster</h1>}
           </div>
 
           <nav className="flex-1 p-4 space-y-2">
-            <SidebarItem icon={<LayoutDashboard />} label="Dashboard" active={currentView === ViewType.DASHBOARD} onClick={() => { setCurrentView(ViewType.DASHBOARD); setIsSidebarOpen(false); }} collapsed={!isSidebarOpen && window.innerWidth >= 1024} />
-            <SidebarItem icon={<Package />} label="Magazzino" active={currentView === ViewType.INVENTORY} onClick={() => { setCurrentView(ViewType.INVENTORY); setIsSidebarOpen(false); }} collapsed={!isSidebarOpen && window.innerWidth >= 1024} />
-            <SidebarItem icon={<Settings />} label="Impostazioni" active={false} onClick={() => { setIsSettingsOpen(true); setIsSidebarOpen(false); }} collapsed={!isSidebarOpen && window.innerWidth >= 1024} />
+            <NavItem icon={<LayoutDashboard />} label="Dashboard" active={currentView === ViewType.DASHBOARD} onClick={() => { setCurrentView(ViewType.DASHBOARD); setIsSidebarOpen(false); }} collapsed={!isSidebarOpen} />
+            <NavItem icon={<Package />} label="Magazzino" active={currentView === ViewType.INVENTORY} onClick={() => { setCurrentView(ViewType.INVENTORY); setIsSidebarOpen(false); }} collapsed={!isSidebarOpen} />
+            <NavItem icon={<Settings />} label="Impostazioni" active={false} onClick={() => { setIsSettingsOpen(true); setIsSidebarOpen(false); }} collapsed={!isSidebarOpen} />
           </nav>
         </div>
       </aside>
 
       <main className="flex-1 flex flex-col h-screen overflow-hidden">
-        <header className="flex-none bg-white border-b px-4 lg:px-8 py-4 flex items-center justify-between z-30">
+        <header className="flex-none bg-white border-b px-4 lg:px-8 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4 flex-1">
-            <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden p-2 hover:bg-slate-100 rounded-lg transition-colors"><Menu className="w-6 h-6 text-slate-600" /></button>
-            <div className="hidden sm:flex relative w-full max-w-md group">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-emerald-500 transition-colors" />
-              <input type="text" placeholder="Cerca SKU o nome..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full pl-10 pr-4 py-2.5 bg-slate-100 border border-transparent rounded-xl text-sm outline-none focus:bg-white focus:border-emerald-500 focus:ring-4 focus:ring-emerald-50/50 transition-all" />
+            <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden p-2"><Menu className="w-6 h-6 text-slate-600" /></button>
+            <div className="hidden sm:flex relative w-full max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input 
+                type="text" 
+                placeholder="Cerca per nome o SKU..." 
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 bg-slate-100 border-transparent rounded-xl text-sm focus:bg-white focus:border-emerald-500 outline-none transition-all" 
+              />
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className={`hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full border text-[10px] font-bold uppercase tracking-widest ${syncError ? 'bg-red-50 text-red-600 border-red-200' : 'bg-emerald-50 text-emerald-600 border-emerald-200'}`}>
-              {isSyncing ? <RefreshCw className="w-3 h-3 animate-spin" /> : syncError ? <WifiOff className="w-3 h-3" /> : <ShieldCheck className="w-3 h-3" />}
-              <span>{syncError ? 'Errore Cloud' : isSyncing ? 'Sincronizzo' : 'Cloud Attivo'}</span>
-            </div>
-            
-            <button onClick={() => { setEditingItem(null); setScannedSku(null); setIsFormOpen(true); }} className="p-3 bg-emerald-600 text-white rounded-xl shadow-lg shadow-emerald-100 active:scale-95 transition-all flex items-center gap-2">
-              <Plus className="w-5 h-5" />
-              <span className="hidden md:inline font-bold text-sm">Aggiungi</span>
-            </button>
+          <div className="flex items-center gap-4">
+             <div className={`hidden md:flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-widest ${syncError ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                {isSyncing ? <RefreshCw className="w-3 h-3 animate-spin" /> : syncError ? <WifiOff className="w-3 h-3" /> : <ShieldCheck className="w-3 h-3" />}
+                {isSyncing ? 'Sincro...' : syncError ? 'Offline' : 'Cloud OK'}
+             </div>
+             <button onClick={() => setIsScannerOpen(true)} className="p-2 bg-slate-100 rounded-xl lg:hidden"><QrCode className="w-5 h-5 text-slate-600" /></button>
+             <button onClick={() => { setEditingItem(null); setScannedSku(null); setIsFormOpen(true); }} className="bg-emerald-600 text-white p-2 sm:px-4 sm:py-2 rounded-xl flex items-center gap-2 shadow-lg shadow-emerald-100 active:scale-95 transition-all">
+                <Plus className="w-5 h-5" />
+                <span className="hidden sm:inline font-bold text-sm">Nuovo</span>
+             </button>
           </div>
         </header>
 
         <div className="flex-1 overflow-y-auto p-4 lg:p-8">
-          {syncError && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-2xl flex items-center gap-4 text-red-700 text-sm shadow-sm animate-in slide-in-from-top-2">
-              <div className="p-2 bg-red-100 rounded-lg"><AlertCircle className="w-5 h-5" /></div>
-              <p className="font-medium">{syncError}</p>
-            </div>
-          )}
-
-          <div className="mb-8">
-            <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
-              {currentView === ViewType.DASHBOARD ? 'Stato del Magazzino' : 'Gestione Inventario'}
-            </h2>
-          </div>
-
-          {currentView === ViewType.DASHBOARD ? <Dashboard items={items} /> : (
-            <InventoryList items={filteredItems} onEdit={(item) => { setEditingItem(item); setIsFormOpen(true); }} onDelete={handleDeleteItem} onQuantityChange={handleQuantityChange} />
+          {currentView === ViewType.DASHBOARD ? (
+            <Dashboard items={items} />
+          ) : (
+            <InventoryList 
+              items={filteredItems} 
+              onEdit={item => { setEditingItem(item); setIsFormOpen(true); }}
+              onDelete={id => syncToCloud(items.filter(i => i.id !== id))}
+              onQuantityChange={(id, delta) => {
+                const updated = items.map(i => i.id === id ? { ...i, quantity: Math.max(0, i.quantity + delta) } : i);
+                syncToCloud(updated);
+              }}
+            />
           )}
         </div>
       </main>
 
+      <button onClick={() => setIsScannerOpen(true)} className="fixed bottom-6 right-6 w-14 h-14 bg-emerald-600 text-white rounded-full shadow-2xl flex items-center justify-center lg:hidden z-40">
+        <QrCode className="w-6 h-6" />
+      </button>
+
+      {isScannerOpen && <BarcodeScanner onScan={code => { setIsScannerOpen(false); const item = items.find(i => i.sku === code); if (item) { setEditingItem(item); setIsFormOpen(true); } else { setScannedSku(code); setEditingItem(null); setIsFormOpen(true); } }} onClose={() => setIsScannerOpen(false)} />}
+      {isFormOpen && <ItemForm initialData={editingItem} scannedSku={scannedSku} onSave={handleSaveItem} onClose={() => setIsFormOpen(false)} />}
+      
       {isSettingsOpen && (
         <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-lg rounded-[2.5rem] p-8 shadow-2xl animate-in zoom-in-95 duration-200">
-            <div className="flex justify-between items-center mb-8">
-              <div className="flex items-center gap-3">
-                <div className="p-3 bg-slate-100 rounded-2xl"><Settings className="w-6 h-6 text-slate-600" /></div>
-                <h3 className="text-2xl font-bold text-slate-800">Impostazioni</h3>
-              </div>
-              <button onClick={() => setIsSettingsOpen(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><X className="w-6 h-6 text-slate-400" /></button>
+          <div className="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold">Impostazioni Cloud</h3>
+              <button onClick={() => setIsSettingsOpen(false)}><X className="w-6 h-6 text-slate-400" /></button>
             </div>
-            
-            <div className="space-y-6">
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">URL Cloud (Apps Script)</label>
-                <input 
-                  type="text" 
-                  placeholder="https://script.google.com/macros/s/.../exec" 
-                  value={sheetUrl}
-                  onChange={e => setSheetUrl(e.target.value)}
-                  className={`w-full p-4 bg-slate-50 border rounded-2xl font-mono text-[10px] outline-none transition-all ${sheetUrl && !isValidSheetUrl(sheetUrl) ? 'border-red-300 ring-4 ring-red-50' : 'border-slate-200 focus:ring-4 focus:ring-emerald-50 focus:border-emerald-500 focus:bg-white'}`}
-                />
-              </div>
-            </div>
-
-            <div className="mt-10 flex gap-4">
-              <button onClick={handleSaveSettings} className="flex-1 py-4 bg-emerald-600 text-white rounded-2xl font-bold shadow-xl shadow-emerald-200 active:scale-95 transition-all text-sm flex items-center justify-center gap-2">
-                <Save className="w-5 h-5" />
-                Applica
-              </button>
+            <div className="space-y-4">
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Apps Script URL</label>
+              <input 
+                type="text" 
+                value={sheetUrl} 
+                onChange={e => setSheetUrl(e.target.value)} 
+                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-mono text-xs"
+              />
+              <button onClick={() => { localStorage.setItem('google_sheet_url', sheetUrl); setIsSettingsOpen(false); loadData(); }} className="w-full py-3 bg-emerald-600 text-white rounded-xl font-bold">Salva e Ricarica</button>
             </div>
           </div>
         </div>
       )}
-
-      {isFormOpen && (
-        <ItemForm 
-          initialData={editingItem} 
-          scannedSku={scannedSku} 
-          onSave={handleSaveItem} 
-          onClose={() => { 
-            setIsFormOpen(false); 
-            setEditingItem(null); 
-            setScannedSku(null);
-          }} 
-        />
-      )}
-      
-      <div className="fixed bottom-8 right-8 lg:hidden flex flex-col gap-4 z-40">
-        <button onClick={() => setIsScannerOpen(true)} className="w-16 h-16 bg-emerald-600 text-white rounded-full shadow-2xl flex items-center justify-center active:scale-90 transition-all border-4 border-white">
-          <QrCode className="w-8 h-8" />
-        </button>
-      </div>
-
-      {isScannerOpen && <BarcodeScanner onScan={handleBarcodeScanned} onClose={() => setIsScannerOpen(false)} />}
     </div>
   );
 };
 
-const SidebarItem = ({ icon, label, active, onClick, collapsed }: any) => (
-  <button onClick={onClick} className={`flex items-center gap-4 w-full p-3 rounded-2xl transition-all ${active ? 'bg-emerald-50 text-emerald-600 shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}>
-    <div className={`${active ? 'text-emerald-600' : 'text-slate-400'}`}>{React.cloneElement(icon as React.ReactElement<any>, { size: 22 })}</div>
-    {!collapsed && <span className="font-bold text-sm whitespace-nowrap">{label}</span>}
+const NavItem = ({ icon, label, active, onClick, collapsed }: any) => (
+  <button onClick={onClick} className={`flex items-center gap-4 w-full p-3 rounded-xl transition-all ${active ? 'bg-emerald-50 text-emerald-600' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'}`}>
+    {icon}
+    <span className={`font-bold text-sm ${collapsed && window.innerWidth >= 1024 ? 'hidden' : 'block'}`}>{label}</span>
   </button>
 );
 
