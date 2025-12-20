@@ -1,14 +1,14 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { LayoutDashboard, Package, QrCode, Search, Plus, Bell, Menu, X, LogOut, CloudSync, RefreshCw, Database, Settings, Link as LinkIcon, AlertCircle, CheckCircle2, RotateCw, WifiOff, Save, ShieldCheck } from 'lucide-react';
-import { InventoryItem, ViewType } from './types';
-import Dashboard from './components/Dashboard';
-import InventoryList from './components/InventoryList';
-import BarcodeScanner from './components/BarcodeScanner';
-import ItemForm from './components/ItemForm';
-import { fetchFromSheet, saveToSheet, isValidSheetUrl } from './services/googleSheetsService';
+import { InventoryItem, ViewType } from './types.ts';
+import Dashboard from './components/Dashboard.tsx';
+import InventoryList from './components/InventoryList.tsx';
+import BarcodeScanner from './components/BarcodeScanner.tsx';
+import ItemForm from './components/ItemForm.tsx';
+import { fetchFromSheet, saveToSheet, isValidSheetUrl } from './services/googleSheetsService.ts';
 
-// URL fornito dall'utente per la configurazione automatica
+// Restante codice invariato...
 const DEFAULT_SHEET_URL = 'https://script.google.com/macros/s/AKfycbzJ39jOpXGi23qPY65QReyjChKz3f_yyUNIT7_BJAKKlm2dYtO-yMA8Pq9udLEx_SSgvQ/exec';
 
 const INITIAL_DATA: InventoryItem[] = [
@@ -43,7 +43,6 @@ const App: React.FC = () => {
     if (showLoader) setIsSyncing(true);
     setSyncError(null);
     
-    // Caricamento locale prioritario
     const localData = localStorage.getItem('inventory_data');
     if (localData) {
       try {
@@ -55,7 +54,6 @@ const App: React.FC = () => {
       setItems(INITIAL_DATA);
     }
 
-    // Caricamento Cloud
     const currentUrl = localStorage.getItem('google_sheet_url') || sheetUrl;
     if (currentUrl && isValidSheetUrl(currentUrl)) {
       try {
@@ -64,8 +62,6 @@ const App: React.FC = () => {
           setItems(cloudData);
           localStorage.setItem('inventory_data', JSON.stringify(cloudData));
           setSyncError(null);
-        } else {
-          setSyncError("Problema connessione Cloud.");
         }
       } catch (err) {
         setSyncError("Cloud non raggiungibile (modalità offline).");
@@ -149,7 +145,6 @@ const App: React.FC = () => {
 
   const handleBarcodeScanned = (code: string) => {
     setIsScannerOpen(false);
-    // Cerca se lo SKU esiste già nell'inventario
     const existingItem = items.find(i => i.sku === code);
     if (existingItem) {
       setEditingItem(existingItem);
@@ -224,9 +219,6 @@ const App: React.FC = () => {
             <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
               {currentView === ViewType.DASHBOARD ? 'Stato del Magazzino' : 'Gestione Inventario'}
             </h2>
-            <p className="text-slate-500 text-sm mt-1">
-              {sheetUrl ? 'Sincronizzato con il cloud' : '⚠️ Modalità locale attiva'}
-            </p>
           </div>
 
           {currentView === ViewType.DASHBOARD ? <Dashboard items={items} /> : (
@@ -235,7 +227,6 @@ const App: React.FC = () => {
         </div>
       </main>
 
-      {/* Modal Impostazioni */}
       {isSettingsOpen && (
         <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-lg rounded-[2.5rem] p-8 shadow-2xl animate-in zoom-in-95 duration-200">
@@ -248,16 +239,6 @@ const App: React.FC = () => {
             </div>
             
             <div className="space-y-6">
-              <div className="bg-emerald-50 border border-emerald-100 p-5 rounded-[1.5rem] flex items-start gap-4">
-                <CloudSync className="w-6 h-6 text-emerald-600 shrink-0 mt-1" />
-                <div>
-                  <h4 className="font-bold text-emerald-900 text-sm">Sincronizzazione Cloud</h4>
-                  <p className="text-xs text-emerald-700 leading-relaxed mt-1">
-                    Connetti un foglio Google tramite Apps Script per rendere i dati accessibili ovunque.
-                  </p>
-                </div>
-              </div>
-
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">URL Cloud (Apps Script)</label>
                 <input 
@@ -271,23 +252,7 @@ const App: React.FC = () => {
             </div>
 
             <div className="mt-10 flex gap-4">
-              <button 
-                onClick={() => { 
-                  if(confirm('Disconnettere il Cloud?')) {
-                    localStorage.removeItem('google_sheet_url'); 
-                    setSheetUrl(''); 
-                    setIsSettingsOpen(false); 
-                    loadData(true); 
-                  }
-                }}
-                className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold text-sm hover:bg-slate-200 transition-colors"
-              >
-                Reset
-              </button>
-              <button 
-                onClick={handleSaveSettings} 
-                className="flex-[2] py-4 bg-emerald-600 text-white rounded-2xl font-bold shadow-xl shadow-emerald-200 active:scale-95 transition-all text-sm flex items-center justify-center gap-2"
-              >
+              <button onClick={handleSaveSettings} className="flex-1 py-4 bg-emerald-600 text-white rounded-2xl font-bold shadow-xl shadow-emerald-200 active:scale-95 transition-all text-sm flex items-center justify-center gap-2">
                 <Save className="w-5 h-5" />
                 Applica
               </button>
@@ -296,8 +261,7 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* ItemForm Modal */}
-      {(isFormOpen) && (
+      {isFormOpen && (
         <ItemForm 
           initialData={editingItem} 
           scannedSku={scannedSku} 
@@ -310,14 +274,12 @@ const App: React.FC = () => {
         />
       )}
       
-      {/* Tasto Floattante Scanner per Mobile */}
       <div className="fixed bottom-8 right-8 lg:hidden flex flex-col gap-4 z-40">
         <button onClick={() => setIsScannerOpen(true)} className="w-16 h-16 bg-emerald-600 text-white rounded-full shadow-2xl flex items-center justify-center active:scale-90 transition-all border-4 border-white">
           <QrCode className="w-8 h-8" />
         </button>
       </div>
 
-      {/* Barcode Scanner Modal */}
       {isScannerOpen && <BarcodeScanner onScan={handleBarcodeScanned} onClose={() => setIsScannerOpen(false)} />}
     </div>
   );
