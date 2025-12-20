@@ -1,7 +1,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
-import { X, RefreshCw, AlertCircle, ScanLine, Zap } from 'lucide-react';
+import { X, RefreshCw, AlertCircle, ScanLine, Zap, Camera, Info } from 'lucide-react';
 
 interface BarcodeScannerProps {
   onScan: (decodedText: string) => void;
@@ -23,12 +23,14 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose }) => {
       
       try {
         const formatsToSupport = [
+          Html5QrcodeSupportedFormats.QR_CODE,
           Html5QrcodeSupportedFormats.EAN_13,
           Html5QrcodeSupportedFormats.EAN_8,
           Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.CODE_39,
           Html5QrcodeSupportedFormats.UPC_A,
           Html5QrcodeSupportedFormats.UPC_E,
-          Html5QrcodeSupportedFormats.QR_CODE
+          Html5QrcodeSupportedFormats.ITF
         ];
 
         const html5QrCode = new Html5Qrcode(scannerId, { 
@@ -37,18 +39,23 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose }) => {
         });
         html5QrCodeRef.current = html5QrCode;
 
+        // Configurazioni per una lettura aggressiva e precisa
         const config = { 
-          fps: 30, // Massimo frame rate per non perdere letture
+          fps: 25, 
           qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
-            // Rettangolo molto largo per facilitare la cattura dei codici a barre standard
-            const width = Math.floor(viewfinderWidth * 0.9);
-            const height = Math.floor(viewfinderHeight * 0.45);
-            return { width: width, height: height };
+            // Box quadrato più grande per catturare meglio i dettagli
+            const minDimension = Math.min(viewfinderWidth, viewfinderHeight);
+            const size = Math.floor(minDimension * 0.7);
+            return { width: size, height: size };
           },
           aspectRatio: 1.0,
-          // Utilizza l'accelerazione hardware se disponibile (molto più veloce)
           experimentalFeatures: {
-            useBarCodeDetectorIfSupported: true
+            useBarCodeDetectorIfSupported: true // Usa API nativa del browser se disponibile (velocissima)
+          },
+          videoConstraints: {
+            facingMode: "environment",
+            width: { min: 640, ideal: 1280, max: 1920 },
+            height: { min: 480, ideal: 720, max: 1080 }
           }
         };
 
@@ -58,24 +65,27 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose }) => {
             config, 
             (decodedText) => {
               if (navigator.vibrate) navigator.vibrate(100);
+              console.log("Codice rilevato:", decodedText);
               onScan(decodedText);
               stopScanner();
             },
-            () => {} // Ignora frame vuoti
+            () => {} // Ignora i frame dove non viene trovato nulla
           );
           setIsInitializing(false);
         }
       } catch (err: any) {
-        console.error("Scanner Error:", err);
+        console.error("Errore inizializzazione scanner:", err);
         if (isMounted) {
-          setError("Permesso fotocamera negato o camera già in uso da un'altra app.");
+          setError("Fotocamera non accessibile. Verifica i permessi nel browser o assicurati che il sito sia in HTTPS.");
           setIsInitializing(false);
         }
       }
     };
 
-    // Piccolo ritardo per assicurarsi che il DOM sia pronto
-    const timer = setTimeout(startScanner, 300);
+    // Ritardo per assicurarsi che il DOM sia pronto
+    const timer = setTimeout(() => {
+      if (isMounted) startScanner();
+    }, 400);
     
     return () => {
       isMounted = false;
@@ -90,69 +100,73 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose }) => {
         await html5QrCodeRef.current.stop();
         html5QrCodeRef.current.clear();
       } catch (e) {
-        console.warn("Errore stop scanner:", e);
+        console.warn("Errore durante lo stop dello scanner:", e);
       }
     }
   };
 
   return (
-    <div className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center">
-      {/* Header Overlay */}
-      <div className="absolute top-0 w-full p-6 flex justify-between items-center z-20 bg-gradient-to-b from-black/70 to-transparent">
-        <div className="flex items-center gap-3 text-white">
-          <div className="p-2 bg-emerald-500 rounded-xl shadow-lg shadow-emerald-500/20">
-            <Zap className="w-5 h-5 fill-current" />
+    <div className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center overflow-hidden">
+      {/* Overlay Header */}
+      <div className="absolute top-0 w-full p-4 flex justify-between items-center z-30 bg-gradient-to-b from-black/80 to-transparent">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center text-white shadow-lg">
+            <ScanLine className="w-6 h-6" />
           </div>
-          <div>
-            <h2 className="font-bold tracking-tight">Scanner Rapido</h2>
-            <p className="text-[10px] text-emerald-400 uppercase font-black tracking-widest">Laser Mode Attivo</p>
+          <div className="text-white">
+            <h2 className="text-sm font-bold">Scanner Magazzino</h2>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+              <p className="text-[10px] text-emerald-400 font-bold uppercase tracking-widest">Multi-Format Attivo</p>
+            </div>
           </div>
         </div>
-        <button onClick={onClose} className="p-3 bg-white/10 hover:bg-white/20 rounded-full text-white backdrop-blur-md transition-all">
+        <button 
+          onClick={onClose} 
+          className="w-10 h-10 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center text-white backdrop-blur-md transition-all border border-white/10"
+        >
           <X className="w-6 h-6" />
         </button>
       </div>
 
       <div className="w-full h-full relative flex items-center justify-center">
         {isInitializing && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-white gap-4 bg-slate-950 z-10">
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-white gap-4 bg-slate-950 z-20">
             <div className="relative">
               <RefreshCw className="w-12 h-12 animate-spin text-emerald-500" />
-              <div className="absolute inset-0 blur-xl bg-emerald-500/20 animate-pulse"></div>
+              <Camera className="absolute inset-0 m-auto w-5 h-5 text-emerald-500 opacity-50" />
             </div>
-            <p className="text-sm font-bold tracking-widest uppercase opacity-70">Calibrazione Ottica...</p>
+            <p className="text-xs font-bold uppercase tracking-widest opacity-70">Calibrazione Fotocamera...</p>
           </div>
         )}
 
         {error ? (
-          <div className="p-10 text-center bg-slate-900 rounded-[2.5rem] border border-red-500/20 m-6 max-w-sm shadow-2xl">
-            <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-            <h3 className="text-white font-black text-xl mb-2">Ops!</h3>
-            <p className="text-slate-400 text-sm mb-8 leading-relaxed">{error}</p>
-            <button onClick={() => window.location.reload()} className="w-full py-4 bg-white text-slate-900 rounded-2xl font-black uppercase tracking-widest text-xs active:scale-95 transition-all">Ricarica</button>
+          <div className="p-8 text-center bg-slate-900 rounded-[2.5rem] border border-red-500/20 m-6 max-w-sm z-40">
+            <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+            <h3 className="text-white font-bold text-lg mb-2">Accesso Negato</h3>
+            <p className="text-slate-400 text-sm mb-6 leading-relaxed">{error}</p>
+            <button onClick={() => window.location.reload()} className="w-full py-4 bg-white text-slate-900 rounded-2xl font-bold text-xs uppercase transition-all shadow-xl">Ricarica Pagina</button>
           </div>
         ) : (
-          <div id={scannerId} className="w-full h-full max-h-screen bg-black overflow-hidden"></div>
+          <div id={scannerId} className="w-full h-full bg-black"></div>
         )}
         
-        {/* Mirino Hi-Tech */}
+        {/* Mirino Visivo */}
         {!isInitializing && !error && (
-          <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center">
-             <div className="w-[85%] h-[35%] border border-white/20 rounded-3xl relative overflow-hidden backdrop-brightness-125">
-                {/* Angoli Rinforzati */}
-                <div className="absolute top-0 left-0 w-10 h-10 border-t-4 border-l-4 border-emerald-500 rounded-tl-3xl"></div>
-                <div className="absolute top-0 right-0 w-10 h-10 border-t-4 border-r-4 border-emerald-500 rounded-tr-3xl"></div>
-                <div className="absolute bottom-0 left-0 w-10 h-10 border-b-4 border-l-4 border-emerald-500 rounded-bl-3xl"></div>
-                <div className="absolute bottom-0 right-0 w-10 h-10 border-b-4 border-r-4 border-emerald-500 rounded-br-3xl"></div>
+          <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center z-10">
+             <div className="w-[75vw] h-[75vw] max-w-[320px] max-h-[320px] relative">
+                {/* Angoli */}
+                <div className="absolute top-0 left-0 w-10 h-10 border-t-4 border-l-4 border-emerald-500 rounded-tl-2xl"></div>
+                <div className="absolute top-0 right-0 w-10 h-10 border-t-4 border-r-4 border-emerald-500 rounded-tr-2xl"></div>
+                <div className="absolute bottom-0 left-0 w-10 h-10 border-b-4 border-l-4 border-emerald-500 rounded-bl-2xl"></div>
+                <div className="absolute bottom-0 right-0 w-10 h-10 border-b-4 border-r-4 border-emerald-500 rounded-br-2xl"></div>
                 
-                {/* Linea Laser Animata */}
-                <div className="absolute w-full h-[2px] bg-red-500 shadow-[0_0_15px_rgba(239,68,68,1)] animate-[laser_1.5s_infinite]"></div>
+                {/* Linea Laser */}
+                <div className="absolute w-full h-[3px] bg-emerald-400 shadow-[0_0_20px_rgba(52,211,153,1)] animate-[laser_2s_infinite]"></div>
              </div>
              
-             <div className="mt-12 text-center animate-bounce">
-                <p className="text-white text-[11px] font-black uppercase tracking-[0.2em] bg-emerald-600/80 px-6 py-2.5 rounded-full backdrop-blur-md shadow-lg border border-emerald-400/50">
-                   Inquadra il Codice
-                </p>
+             <div className="mt-10 bg-black/60 backdrop-blur-md px-6 py-3 rounded-full border border-white/10 shadow-2xl">
+                <p className="text-white text-[10px] font-bold uppercase tracking-[0.2em]">Inquadra il Codice QR o a Barre</p>
              </div>
           </div>
         )}
@@ -160,16 +174,21 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose }) => {
       
       <style>{`
         @keyframes laser {
-          0% { top: 10%; opacity: 0.2; }
-          50% { top: 90%; opacity: 1; }
-          100% { top: 10%; opacity: 0.2; }
+          0% { top: 5%; opacity: 0; }
+          20% { opacity: 1; }
+          80% { opacity: 1; }
+          100% { top: 95%; opacity: 0; }
         }
         #barcode-full-screen-reader video {
           object-fit: cover !important;
           width: 100% !important;
           height: 100% !important;
-          transform: scale(1.05); /* Leggero zoom per aiutare la messa a fuoco */
+          position: absolute;
+          top: 0;
+          left: 0;
         }
+        #barcode-full-screen-reader__dashboard { display: none !important; }
+        #barcode-full-screen-reader__scan_region { border: none !important; }
       `}</style>
     </div>
   );

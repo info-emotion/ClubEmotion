@@ -7,14 +7,15 @@
     <title>StockMaster AI - Gestione Magazzino</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Babel Standalone per transpilare TSX nel browser ed evitare errori MIME -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <style>
         body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
-        /* Fix per scroll su iOS */
         .scrollbar-hide::-webkit-scrollbar { display: none; }
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
     <script>
-      // Polyfill per evitare il crash su ambienti statici come GitHub Pages dove process non esiste
+      // Polyfill per process.env
       window.process = { env: { API_KEY: "" } };
     </script>
 <script type="importmap">
@@ -33,7 +34,7 @@
 </head>
 <body class="bg-slate-50 text-slate-900 overflow-x-hidden">
     <div id="root"></div>
-    <!-- Cambiato src da /index.tsx a ./index.tsx per compatibilità con sottocartelle GitHub Pages -->
-    <script type="module" src="./index.tsx"></script>
+    <!-- Carichiamo l'entry point come script type text/babel per il loader di Babel -->
+    <script type="text/babel" data-type="module" src="./index.tsx"></script>
 </body>
 </html>

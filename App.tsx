@@ -21,7 +21,6 @@ const App: React.FC = () => {
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [sheetUrl, setSheetUrl] = useState(() => {
     const saved = localStorage.getItem('google_sheet_url');
-    // Se non c'è nulla salvato, usa quello fornito dall'utente
     if (!saved) {
       localStorage.setItem('google_sheet_url', DEFAULT_SHEET_URL);
       return DEFAULT_SHEET_URL;
@@ -44,7 +43,7 @@ const App: React.FC = () => {
     if (showLoader) setIsSyncing(true);
     setSyncError(null);
     
-    // Carica dati locali per reattività immediata
+    // Caricamento locale prioritario
     const localData = localStorage.getItem('inventory_data');
     if (localData) {
       try {
@@ -56,7 +55,7 @@ const App: React.FC = () => {
       setItems(INITIAL_DATA);
     }
 
-    // Sincronizzazione Cloud
+    // Caricamento Cloud
     const currentUrl = localStorage.getItem('google_sheet_url') || sheetUrl;
     if (currentUrl && isValidSheetUrl(currentUrl)) {
       try {
@@ -66,10 +65,10 @@ const App: React.FC = () => {
           localStorage.setItem('inventory_data', JSON.stringify(cloudData));
           setSyncError(null);
         } else {
-          setSyncError("Impossibile connettersi al Cloud. Verificare URL.");
+          setSyncError("Problema connessione Cloud.");
         }
       } catch (err) {
-        setSyncError("Errore di rete. Dati cloud non aggiornati.");
+        setSyncError("Cloud non raggiungibile (modalità offline).");
       }
     }
     
@@ -90,7 +89,7 @@ const App: React.FC = () => {
     if (savedUrl && isValidSheetUrl(savedUrl)) {
       setIsSyncing(true);
       const success = await saveToSheet(savedUrl, newItems);
-      if (!success) setSyncError("Modifica salvata solo localmente.");
+      if (!success) setSyncError("Salvato solo localmente.");
       else setSyncError(null);
       setIsSyncing(false);
     }
@@ -98,7 +97,7 @@ const App: React.FC = () => {
 
   const handleSaveSettings = () => {
     if (sheetUrl && !isValidSheetUrl(sheetUrl)) {
-      alert("L'URL deve terminare con /exec");
+      alert("URL non valido. Deve terminare con /exec");
       return;
     }
     localStorage.setItem('google_sheet_url', sheetUrl);
@@ -139,11 +138,26 @@ const App: React.FC = () => {
     syncToCloud(updated);
     setIsFormOpen(false);
     setEditingItem(null);
+    setScannedSku(null);
   };
 
   const handleDeleteItem = (id: string) => {
     if (confirm('Eliminare definitivamente questo articolo?')) {
       syncToCloud(items.filter(i => i.id !== id));
+    }
+  };
+
+  const handleBarcodeScanned = (code: string) => {
+    setIsScannerOpen(false);
+    // Cerca se lo SKU esiste già nell'inventario
+    const existingItem = items.find(i => i.sku === code);
+    if (existingItem) {
+      setEditingItem(existingItem);
+      setIsFormOpen(true);
+    } else {
+      setScannedSku(code);
+      setEditingItem(null);
+      setIsFormOpen(true);
     }
   };
 
@@ -155,7 +169,7 @@ const App: React.FC = () => {
   }, [items, searchQuery]);
 
   return (
-    <div className="min-h-screen flex bg-slate-50 font-sans selection:bg-emerald-100 selection:text-emerald-900">
+    <div className="min-h-screen flex bg-slate-50 font-sans selection:bg-emerald-100 selection:text-emerald-900 overflow-hidden">
       {isSidebarOpen && <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-[2px] z-40 lg:hidden" onClick={() => setIsSidebarOpen(false)} />}
 
       <aside className={`fixed lg:sticky top-0 left-0 z-50 h-screen bg-white border-r border-slate-200 transition-all duration-300 ${isSidebarOpen ? 'w-64 shadow-2xl' : 'w-64 -translate-x-full lg:translate-x-0 lg:w-20'}`}>
@@ -211,16 +225,17 @@ const App: React.FC = () => {
               {currentView === ViewType.DASHBOARD ? 'Stato del Magazzino' : 'Gestione Inventario'}
             </h2>
             <p className="text-slate-500 text-sm mt-1">
-              {sheetUrl ? 'I dati sono sincronizzati con il foglio Google' : '⚠️ Modalità locale attiva'}
+              {sheetUrl ? 'Sincronizzato con il cloud' : '⚠️ Modalità locale attiva'}
             </p>
           </div>
 
           {currentView === ViewType.DASHBOARD ? <Dashboard items={items} /> : (
-            <InventoryList items={filteredItems} onEdit={setEditingItem} onDelete={handleDeleteItem} onQuantityChange={handleQuantityChange} />
+            <InventoryList items={filteredItems} onEdit={(item) => { setEditingItem(item); setIsFormOpen(true); }} onDelete={handleDeleteItem} onQuantityChange={handleQuantityChange} />
           )}
         </div>
       </main>
 
+      {/* Modal Impostazioni */}
       {isSettingsOpen && (
         <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-lg rounded-[2.5rem] p-8 shadow-2xl animate-in zoom-in-95 duration-200">
@@ -238,13 +253,13 @@ const App: React.FC = () => {
                 <div>
                   <h4 className="font-bold text-emerald-900 text-sm">Sincronizzazione Cloud</h4>
                   <p className="text-xs text-emerald-700 leading-relaxed mt-1">
-                    Connetti un foglio Google tramite Apps Script.
+                    Connetti un foglio Google tramite Apps Script per rendere i dati accessibili ovunque.
                   </p>
                 </div>
               </div>
 
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Web Apps Script URL</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">URL Cloud (Apps Script)</label>
                 <input 
                   type="text" 
                   placeholder="https://script.google.com/macros/s/.../exec" 
@@ -267,38 +282,43 @@ const App: React.FC = () => {
                 }}
                 className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold text-sm hover:bg-slate-200 transition-colors"
               >
-                Disconnetti
+                Reset
               </button>
               <button 
                 onClick={handleSaveSettings} 
                 className="flex-[2] py-4 bg-emerald-600 text-white rounded-2xl font-bold shadow-xl shadow-emerald-200 active:scale-95 transition-all text-sm flex items-center justify-center gap-2"
               >
                 <Save className="w-5 h-5" />
-                Salva e Sincronizza
+                Applica
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {(isFormOpen || editingItem) && <ItemForm initialData={editingItem} scannedSku={scannedSku} onSave={handleSaveItem} onClose={() => { setIsFormOpen(false); setEditingItem(null); }} />}
+      {/* ItemForm Modal */}
+      {(isFormOpen) && (
+        <ItemForm 
+          initialData={editingItem} 
+          scannedSku={scannedSku} 
+          onSave={handleSaveItem} 
+          onClose={() => { 
+            setIsFormOpen(false); 
+            setEditingItem(null); 
+            setScannedSku(null);
+          }} 
+        />
+      )}
       
+      {/* Tasto Floattante Scanner per Mobile */}
       <div className="fixed bottom-8 right-8 lg:hidden flex flex-col gap-4 z-40">
         <button onClick={() => setIsScannerOpen(true)} className="w-16 h-16 bg-emerald-600 text-white rounded-full shadow-2xl flex items-center justify-center active:scale-90 transition-all border-4 border-white">
           <QrCode className="w-8 h-8" />
         </button>
       </div>
 
-      {isScannerOpen && <BarcodeScanner onScan={(code) => {
-        setIsScannerOpen(false);
-        const exists = items.find(i => i.sku === code);
-        if (exists) {
-          setEditingItem(exists);
-        } else {
-          setScannedSku(code);
-          setIsFormOpen(true);
-        }
-      }} onClose={() => setIsScannerOpen(false)} />}
+      {/* Barcode Scanner Modal */}
+      {isScannerOpen && <BarcodeScanner onScan={handleBarcodeScanned} onClose={() => setIsScannerOpen(false)} />}
     </div>
   );
 };
